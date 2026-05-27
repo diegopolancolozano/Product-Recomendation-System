@@ -8,6 +8,7 @@ import type { ResumenData } from "@/types/api";
 
 interface Props {
   data: ResumenData;
+  totalCustomers?: number;   // pasado desde page.tsx via vizData.boxplot.total_customers
 }
 
 const CARD: React.CSSProperties = {
@@ -30,7 +31,9 @@ const CARD_SUB: React.CSSProperties = {
   marginBottom: 16,
 };
 
-export function ResumenTab({ data }: Props) {
+export function ResumenTab({ data, totalCustomers }: Props) {
+  const activeDays = data.transactions_per_day.length;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
@@ -38,16 +41,9 @@ export function ResumenTab({ data }: Props) {
       <KPICards
         totalUnits={data.total_units}
         totalTransactions={data.total_transactions}
+        totalCustomers={totalCustomers}
+        activeDays={activeDays}
       />
-
-      {/* Aviso */}
-      <div style={{
-        background: "#eff6ff", border: "1px solid #bfdbfe",
-        borderRadius: 6, padding: "10px 16px",
-        fontSize: 12, color: "#1d4ed8",
-      }}>
-        El dataset no incluye precios ni montos. Las métricas se basan en volumen de ítems y frecuencia de compra.
-      </div>
 
       {/* Fila 1: Top productos + Top clientes */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>

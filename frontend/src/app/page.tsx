@@ -158,7 +158,12 @@ export default function Dashboard() {
         {!loading && error && <ErrorState message={error} />}
         {!loading && !error && (
           <>
-            {activeTab === "resumen"         && resumenData && <ResumenTab data={resumenData} />}
+            {activeTab === "resumen"         && resumenData && (
+              <ResumenTab
+                data={resumenData}
+                totalCustomers={vizData?.boxplot.total_customers}
+              />
+            )}
             {activeTab === "visualizaciones" && vizData     && <VisualizacionesTab data={vizData} />}
           </>
         )}
