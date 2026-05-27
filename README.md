@@ -1,7 +1,12 @@
 # Product Recommendation System — Supermarket Analytics
 
 **Proyecto final · Procesamiento Distribuido de Datos**  
-Diego Armando Polanco Lozano · Ricardo Andrés Chamorro Martínez
+
+**Integrantes:**
+
+- Ricardo Andrés Chamorro Martínez
+
+- Diego Armando Polanco Lozano
 
 ---
 
@@ -115,7 +120,7 @@ Swagger UI disponible en: http://localhost:8000/docs
 
 ## Módulos implementados
 
-### ✅ Resumen Ejecutivo
+### Resumen Ejecutivo
 - Total unidades vendidas (KPI)
 - Número de transacciones (KPI)
 - Top 10 productos por volumen (barras horizontales)
@@ -123,12 +128,12 @@ Swagger UI disponible en: http://localhost:8000/docs
 - Días pico de compra (serie de tiempo)
 - Categorías más relevantes (barras horizontales)
 
-### ✅ Visualizaciones Analíticas
+### Visualizaciones Analíticas
 - Ventas diarias — serie de tiempo con promedio de referencia
 - Distribución de unidades por cliente — boxplot (Tukey) con estadísticas
 - Correlación entre variables del cliente — heatmap de Pearson
 
-### 🔜 Análisis Avanzado (próxima entrega)
+### Análisis Avanzado (próxima entrega)
 - Segmentación K-Means (`/api/segmentacion`)
 - Recomendador por co-ocurrencia (`/api/recomendacion`)
 - Incorporación de nuevos datos en tiempo real
