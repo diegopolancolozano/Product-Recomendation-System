@@ -12,23 +12,13 @@
 
 ## Objetivo
 
-Solución funcional para análisis descriptivo y diagnóstico de transacciones de supermercado, con segmentación y recomendación de productos, sobre arquitectura **Google Cloud Platform**.
+Solución funcional para análisis descriptivo y diagnóstico de transacciones de supermercado, con segmentación y recomendación de productos.
 
 ---
 
 ## Arquitectura (GCP)
 
-```
-CSV files → Cloud Storage → Cloud Functions → Dataproc (Spark)
-                                                    ↓
-                                            Cloud SQL (PostgreSQL)
-                                                    ↓
-                                         Cloud Run — FastAPI  ← GitHub → Cloud Build
-                                                    ↓
-                                         Cloud Run — Next.js
-                                                    ↓
-                                               Analista
-```
+![Arquitectura General del Proyecto](Arquitectura%20General%20Proyecto.png)
 
 Ver [diagrama_nube.md](diagrama_nube.md) para el modelo C4 completo.
 
