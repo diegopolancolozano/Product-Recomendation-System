@@ -78,7 +78,7 @@ def explode_items(
     items = items.dropna(subset=["product_id"])
     items = items.merge(product_category, on="product_id", how="left")
     items = items.merge(categories, on="category_id", how="left")
-    items["category_name"] = items["category_name"].fillna("Unknown")
+    items["category_name"] = items["category_name"].fillna("Sin categoría")
     return items
 
 
