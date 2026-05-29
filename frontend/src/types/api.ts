@@ -67,3 +67,32 @@ export interface VisualizacionesData {
   correlation_matrix: CorrelationPoint[];
   correlation_labels: string[];
 }
+
+// ---------------------------------------------------------------------------
+
+export interface WeekdayPoint {
+  weekday: number;       // 0=Lunes … 6=Domingo
+  day_name: string;
+  avg_transactions: number;
+  avg_units: number;
+  total_transactions: number;
+}
+
+export interface StorePoint {
+  store_id: string;
+  transactions: number;
+  units: number;
+}
+
+export interface FreqBucket {
+  bucket: string;   // "1","2",…,"21+"
+  customers: number;
+}
+
+/** Respuesta de GET /api/patrones */
+export interface PatronesData {
+  by_weekday: WeekdayPoint[];
+  by_store: StorePoint[];
+  num_stores: number;
+  freq_histogram: FreqBucket[];
+}

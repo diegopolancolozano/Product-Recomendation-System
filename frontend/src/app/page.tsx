@@ -3,15 +3,17 @@
 import { useState, useEffect } from "react";
 import { ResumenTab } from "@/components/ResumenTab";
 import { VisualizacionesTab } from "@/components/VisualizacionesTab";
-import type { ResumenData, VisualizacionesData } from "@/types/api";
+import { PatronesTab } from "@/components/PatronesTab";
+import type { ResumenData, VisualizacionesData, PatronesData } from "@/types/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-type Tab = "resumen" | "visualizaciones";
+type Tab = "resumen" | "visualizaciones" | "patrones";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "resumen",         label: "Resumen Ejecutivo" },
   { id: "visualizaciones", label: "Visualizaciones Analíticas" },
+  { id: "patrones",        label: "Patrones de Compra" },
 ];
 
 function Spinner() {
@@ -52,22 +54,26 @@ function ErrorState({ message }: { message: string }) {
 
 export default function Dashboard() {
   const [activeTab, setActiveTab]     = useState<Tab>("resumen");
-  const [resumenData, setResumenData] = useState<ResumenData | null>(null);
-  const [vizData, setVizData]         = useState<VisualizacionesData | null>(null);
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState<string | null>(null);
+  const [resumenData, setResumenData]   = useState<ResumenData | null>(null);
+  const [vizData, setVizData]           = useState<VisualizacionesData | null>(null);
+  const [patronesData, setPatronesData] = useState<PatronesData | null>(null);
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const [rRes, vRes] = await Promise.all([
+        const [rRes, vRes, pRes] = await Promise.all([
           fetch(`${API_BASE}/api/resumen`),
           fetch(`${API_BASE}/api/visualizaciones`),
+          fetch(`${API_BASE}/api/patrones`),
         ]);
-        if (!rRes.ok || !vRes.ok) throw new Error(`HTTP ${rRes.status} / ${vRes.status}`);
-        const [r, v] = await Promise.all([rRes.json(), vRes.json()]);
+        if (!rRes.ok || !vRes.ok || !pRes.ok)
+          throw new Error(`HTTP ${rRes.status} / ${vRes.status} / ${pRes.status}`);
+        const [r, v, p] = await Promise.all([rRes.json(), vRes.json(), pRes.json()]);
         setResumenData(r);
         setVizData(v);
+        setPatronesData(p);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Error desconocido");
       } finally {
@@ -164,7 +170,8 @@ export default function Dashboard() {
                 totalCustomers={vizData?.boxplot.total_customers}
               />
             )}
-            {activeTab === "visualizaciones" && vizData     && <VisualizacionesTab data={vizData} />}
+            {activeTab === "visualizaciones" && vizData      && <VisualizacionesTab data={vizData} />}
+            {activeTab === "patrones"        && patronesData && <PatronesTab data={patronesData} />}
           </>
         )}
       </main>

@@ -164,6 +164,136 @@ def run_kmeans(features: pd.DataFrame, k: int) -> Tuple[pd.DataFrame, pd.DataFra
     return clustered, summary
 
 
+WEEKDAY_ES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+
+
+def compute_patterns(transactions: pd.DataFrame, items: pd.DataFrame) -> dict:
+    """
+    Patrones temporales y espaciales derivados de las columnas ya cargadas.
+
+    Retorna:
+      by_weekday  — promedio diario de transacciones y unidades por día de semana
+      by_store    — volumen total de transacciones y unidades por store_id
+      freq_hist   — histograma de frecuencia de compra por cliente
+    """
+    result: dict = {}
+
+    # ── Día de la semana ──────────────────────────────────────────────────────
+    if not transactions.empty and "date" in transactions.columns:
+        t = transactions.dropna(subset=["date"]).copy()
+        t["weekday"] = t["date"].dt.dayofweek          # 0=Lunes … 6=Domingo
+        t["date_only"] = t["date"].dt.date
+
+        # Contar cuántos días distintos caen en cada weekday (para el promedio)
+        days_per_wd = (
+            t[["weekday", "date_only"]]
+            .drop_duplicates()
+            .groupby("weekday")["date_only"]
+            .count()
+            .rename("num_days")
+        )
+
+        txn_per_wd = (
+            t.groupby("weekday")["transaction_uid"]
+            .nunique()
+            .rename("total_transactions")
+        )
+
+        wd_df = pd.concat([txn_per_wd, days_per_wd], axis=1).fillna(0)
+        wd_df["avg_transactions"] = (
+            wd_df["total_transactions"] / wd_df["num_days"].replace(0, np.nan)
+        ).fillna(0).round(1)
+
+        # Unidades por día de semana (promedio diario)
+        if not items.empty and "date" in items.columns:
+            it = items.dropna(subset=["date"]).copy()
+            it["weekday"] = it["date"].dt.dayofweek
+            units_per_wd = it.groupby("weekday")["product_id"].count().rename("total_units")
+            wd_df = wd_df.join(units_per_wd, how="left").fillna(0)
+            wd_df["avg_units"] = (
+                wd_df["total_units"] / wd_df["num_days"].replace(0, np.nan)
+            ).fillna(0).round(1)
+        else:
+            wd_df["avg_units"] = 0.0
+
+        result["by_weekday"] = [
+            {
+                "weekday": int(idx),
+                "day_name": WEEKDAY_ES[int(idx)],
+                "avg_transactions": float(row["avg_transactions"]),
+                "avg_units": float(row["avg_units"]),
+                "total_transactions": int(row["total_transactions"]),
+            }
+            for idx, row in wd_df.sort_index().iterrows()
+            if 0 <= int(idx) <= 6
+        ]
+    else:
+        result["by_weekday"] = []
+
+    # ── Por tienda ────────────────────────────────────────────────────────────
+    if not transactions.empty and "store_id" in transactions.columns:
+        store_txn = (
+            transactions.groupby("store_id")["transaction_uid"]
+            .nunique()
+            .sort_values(ascending=False)
+            .reset_index(name="transactions")
+        )
+        store_units = pd.Series(dtype="int64")
+        if not items.empty and "store_id" in items.columns:
+            store_units = (
+                items.groupby("store_id")["product_id"]
+                .count()
+                .rename("units")
+            )
+
+        store_df = store_txn.set_index("store_id")
+        store_df = store_df.join(store_units, how="left").fillna(0).reset_index()
+        store_df["units"] = store_df["units"].astype(int)
+
+        result["by_store"] = [
+            {
+                "store_id": str(row["store_id"]),
+                "transactions": int(row["transactions"]),
+                "units": int(row["units"]),
+            }
+            for _, row in store_df.head(20).iterrows()
+        ]
+        result["num_stores"] = int(len(store_df))
+    else:
+        result["by_store"] = []
+        result["num_stores"] = 0
+
+    # ── Histograma de frecuencia de compra ────────────────────────────────────
+    if not transactions.empty:
+        freq_series = (
+            transactions.groupby("customer_id")["transaction_uid"]
+            .nunique()
+        )
+        # Buckets: 1, 2, 3, 4, 5, 6-10, 11-20, 21+
+        def bucket(n: int) -> str:
+            if n <= 5:
+                return str(n)
+            if n <= 10:
+                return "6-10"
+            if n <= 20:
+                return "11-20"
+            return "21+"
+
+        BUCKET_ORDER = ["1", "2", "3", "4", "5", "6-10", "11-20", "21+"]
+        hist = freq_series.map(bucket).value_counts().rename("customers")
+        hist_df = hist.reindex(BUCKET_ORDER, fill_value=0).reset_index()
+        hist_df.columns = pd.Index(["bucket", "customers"])
+
+        result["freq_histogram"] = [
+            {"bucket": str(row["bucket"]), "customers": int(row["customers"])}
+            for _, row in hist_df.iterrows()
+        ]
+    else:
+        result["freq_histogram"] = []
+
+    return result
+
+
 def build_cooccurrence(
     items: pd.DataFrame, min_item_support: int = 20
 ) -> Tuple[Dict[int, int], Counter]:

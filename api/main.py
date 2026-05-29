@@ -25,7 +25,7 @@ import sys
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.analytics import compute_kpis, build_product_labels
+from src.analytics import compute_kpis, build_product_labels, compute_patterns
 from src.data_loader import load_data
 
 # ---------------------------------------------------------------------------
@@ -64,8 +64,10 @@ def startup_event() -> None:
         transactions: pd.DataFrame = data["transactions"]
         items: pd.DataFrame = data["items"]
         kpis = compute_kpis(transactions, items)
+        patterns = compute_patterns(transactions, items)
         _cache["data"] = data
         _cache["kpis"] = kpis
+        _cache["patterns"] = patterns
         print(
             f"Datos cargados — "
             f"{kpis['total_transactions']} transacciones, "
@@ -223,3 +225,11 @@ def get_visualizaciones() -> dict:
         "correlation_matrix": correlation_matrix,
         "correlation_labels": corr_labels,
     }
+
+
+@app.get("/api/patrones")
+def get_patrones() -> dict:
+    """Patrones temporales y espaciales: día de semana, tienda, frecuencia de compra."""
+    if "patterns" not in _cache:
+        raise HTTPException(status_code=503, detail="Datos aún no disponibles.")
+    return _cache["patterns"]
