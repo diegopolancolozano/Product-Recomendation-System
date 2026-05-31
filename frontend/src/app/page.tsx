@@ -4,16 +4,20 @@ import { useState, useEffect } from "react";
 import { ResumenTab } from "@/components/ResumenTab";
 import { VisualizacionesTab } from "@/components/VisualizacionesTab";
 import { PatronesTab } from "@/components/PatronesTab";
-import type { ResumenData, VisualizacionesData, PatronesData } from "@/types/api";
+import { SegmentacionTab } from "@/components/SegmentacionTab";
+import { RecomendacionTab } from "@/components/RecomendacionTab";
+import type { ResumenData, VisualizacionesData, PatronesData, SegmentacionData } from "@/types/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-type Tab = "resumen" | "visualizaciones" | "patrones";
+type Tab = "resumen" | "visualizaciones" | "patrones" | "segmentacion" | "recomendacion";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "resumen",         label: "Resumen Ejecutivo" },
   { id: "visualizaciones", label: "Visualizaciones Analíticas" },
   { id: "patrones",        label: "Patrones de Compra" },
+  { id: "segmentacion",    label: "Segmentación" },
+  { id: "recomendacion",   label: "Recomendaciones" },
 ];
 
 function Spinner() {
@@ -53,13 +57,17 @@ function ErrorState({ message }: { message: string }) {
 }
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab]     = useState<Tab>("resumen");
-  const [resumenData, setResumenData]   = useState<ResumenData | null>(null);
-  const [vizData, setVizData]           = useState<VisualizacionesData | null>(null);
-  const [patronesData, setPatronesData] = useState<PatronesData | null>(null);
-  const [loading, setLoading]           = useState(true);
-  const [error, setError]               = useState<string | null>(null);
+  const [activeTab, setActiveTab]           = useState<Tab>("resumen");
+  const [resumenData, setResumenData]       = useState<ResumenData | null>(null);
+  const [vizData, setVizData]               = useState<VisualizacionesData | null>(null);
+  const [patronesData, setPatronesData]     = useState<PatronesData | null>(null);
+  const [segData, setSegData]               = useState<SegmentacionData | null>(null);
+  const [segLoading, setSegLoading]         = useState(false);
+  const [segError, setSegError]             = useState<string | null>(null);
+  const [loading, setLoading]               = useState(true);
+  const [error, setError]                   = useState<string | null>(null);
 
+  // Carga inicial: resumen, visualizaciones y patrones
   useEffect(() => {
     (async () => {
       try {
@@ -81,6 +89,21 @@ export default function Dashboard() {
       }
     })();
   }, []);
+
+  // Carga lazy de segmentación (solo al activar el tab por primera vez)
+  useEffect(() => {
+    if (activeTab !== "segmentacion" || segData || segLoading) return;
+    setSegLoading(true);
+    setSegError(null);
+    fetch(`${API_BASE}/api/segmentacion`)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then(setSegData)
+      .catch(e => setSegError(e instanceof Error ? e.message : "Error desconocido"))
+      .finally(() => setSegLoading(false));
+  }, [activeTab, segData, segLoading]);
 
   const apiStatus = error ? "offline" : loading ? "connecting" : "online";
 
@@ -172,6 +195,13 @@ export default function Dashboard() {
             )}
             {activeTab === "visualizaciones" && vizData      && <VisualizacionesTab data={vizData} />}
             {activeTab === "patrones"        && patronesData && <PatronesTab data={patronesData} />}
+            {activeTab === "segmentacion"    && (
+              segLoading  ? <Spinner /> :
+              segError    ? <ErrorState message={segError} /> :
+              segData     ? <SegmentacionTab data={segData} /> :
+              null
+            )}
+            {activeTab === "recomendacion"   && <RecomendacionTab apiBase={API_BASE} />}
           </>
         )}
       </main>

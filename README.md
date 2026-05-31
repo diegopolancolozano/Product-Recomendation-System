@@ -51,6 +51,16 @@ Ver [diagrama_nube.md](diagrama_nube.md) para el modelo C4 completo.
 
 ---
 
+## Despliegue
+
+Ver **[DEPLOY.md](DEPLOY.md)** para instrucciones completas:
+- Ejecución local (Windows / macOS / Linux)
+- Despliegue en GCP Cloud Run (demo rápido, sin Dataproc)
+- CI/CD con Cloud Build (automático en push a `main`)
+- Arquitectura completa (Dataproc + Cloud Functions + Cloud SQL)
+
+---
+
 ## Ejecución local (desarrollo)
 
 ### Prerequisitos
@@ -100,9 +110,13 @@ npm run dev
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| GET | `/api/health` | Estado del servicio |
+| GET | `/api/health` | Estado del servicio y conteos |
 | GET | `/api/resumen` | KPIs, top productos/clientes, días pico, categorías |
 | GET | `/api/visualizaciones` | Serie de tiempo, boxplot, heatmap de correlación |
+| GET | `/api/patrones` | Actividad por día de semana, por tienda, frecuencia de compra |
+| GET | `/api/segmentacion` | Clusters K-Means (k=4): coordenadas PCA + perfil de cada segmento |
+| GET | `/api/recomendacion` | Co-ocurrencia: `?product_id=X` o `?customer_id=Y` |
+| POST | `/api/reload` | Recarga datos desde `DATA_DIR` y recomputa todos los caches |
 
 Swagger UI disponible en: http://localhost:8000/docs
 
@@ -111,22 +125,35 @@ Swagger UI disponible en: http://localhost:8000/docs
 ## Módulos implementados
 
 ### Resumen Ejecutivo
-- Total unidades vendidas (KPI)
-- Número de transacciones (KPI)
+- Total unidades vendidas · Número de transacciones · Canasta promedio · Clientes únicos (KPIs)
 - Top 10 productos por volumen (barras horizontales)
 - Top 10 clientes por compras (barras horizontales)
 - Días pico de compra (serie de tiempo)
-- Categorías más relevantes (barras horizontales)
+- Categorías más relevantes (pastel)
 
 ### Visualizaciones Analíticas
 - Ventas diarias — serie de tiempo con promedio de referencia
 - Distribución de unidades por cliente — boxplot (Tukey) con estadísticas
 - Correlación entre variables del cliente — heatmap de Pearson
 
-### Análisis Avanzado (próxima entrega)
-- Segmentación K-Means (`/api/segmentacion`)
-- Recomendador por co-ocurrencia (`/api/recomendacion`)
-- Incorporación de nuevos datos en tiempo real
+### Patrones de Compra *(nuevo)*
+- Actividad promedio por día de la semana (bar chart con intensidad semafórica)
+- Frecuencia de compra por cliente — histograma de recurrencia
+- Actividad por tienda (si hay múltiples `store_id` en el dataset)
+
+### Segmentación de Clientes
+- K-Means (k=4) sobre 5 variables: frecuencia, volumen, productos únicos, categorías, canasta promedio
+- Visualización scatter con proyección PCA (2 componentes)
+- Perfil automático de cada segmento con descripción interpretativa
+
+### Recomendador de Productos
+- Filtrado colaborativo por co-ocurrencia (soporte mínimo = 5 transacciones)
+- Búsqueda por producto: qué se compra junto a X (confianza P(B|A))
+- Búsqueda por cliente: qué debería comprar según historial (score acumulado)
+
+### Incorporación de nuevos datos
+- `POST /api/reload` recomputa todos los módulos al recibir datos frescos
+- En arquitectura Dataproc: Cloud Functions detecta CSV nuevo en GCS y lanza los jobs Spark
 
 ---
 

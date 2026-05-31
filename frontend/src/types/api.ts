@@ -96,3 +96,50 @@ export interface PatronesData {
   num_stores: number;
   freq_histogram: FreqBucket[];
 }
+
+// ---------------------------------------------------------------------------
+
+export interface ClusterPoint {
+  customer_id: string;
+  cluster: number;      // 0-3
+  pca1: number;
+  pca2: number;
+  frequency: number;
+  total_units: number;
+  unique_products: number;
+  unique_categories: number;
+  avg_basket_size: number;
+}
+
+export interface ClusterProfile {
+  cluster: number;
+  frequency: number;
+  total_units: number;
+  unique_products: number;
+  unique_categories: number;
+  avg_basket_size: number;
+  size: number;         // nº de clientes en el cluster
+}
+
+/** Respuesta de GET /api/segmentacion */
+export interface SegmentacionData {
+  points: ClusterPoint[];
+  profiles: ClusterProfile[];
+  n_clusters: number;
+}
+
+// ---------------------------------------------------------------------------
+
+export interface RecomendacionItem {
+  product_id: number;
+  label: string;
+  support: number;
+  score: number;
+  score_label: string;  // "Confianza" | "Score"
+}
+
+/** Respuesta de GET /api/recomendacion */
+export interface RecomendacionData {
+  query: { type: "product" | "customer"; id: number | string };
+  results: RecomendacionItem[];
+}
