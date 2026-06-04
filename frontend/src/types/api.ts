@@ -22,7 +22,7 @@ export interface BoxplotStats {
   whisker_low: number; q1: number; median: number; q3: number; whisker_high: number;
   mean: number; std: number; total_customers: number; outlier_count: number; outliers: number[];
 }
-export interface UnitDay        { date: string; units: number }
+export interface UnitDay         { date: string; units: number }
 export interface CorrelationPoint { x: string; y: string; value: number }
 
 export interface VisualizacionesData {

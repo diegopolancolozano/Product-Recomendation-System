@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ResumenTab }        from "@/components/ResumenTab";
+import { ResumenTab }         from "@/components/ResumenTab";
 import { VisualizacionesTab } from "@/components/VisualizacionesTab";
-import { PatronesTab }       from "@/components/PatronesTab";
-import { AvanzadoTab }       from "@/components/AvanzadoTab";
+import { PatronesTab }        from "@/components/PatronesTab";
+import { AvanzadoTab }        from "@/components/AvanzadoTab";
 import type { ResumenData, VisualizacionesData, PatronesData, AvanzadoData } from "@/types/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -12,10 +12,10 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 type Tab = "resumen" | "visualizaciones" | "patrones" | "avanzado";
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "resumen",          label: "Resumen Ejecutivo" },
-  { id: "visualizaciones",  label: "Visualizaciones Analiticas" },
-  { id: "patrones",         label: "Patrones de Compra" },
-  { id: "avanzado",         label: "Analisis Avanzado" },
+  { id: "resumen",         label: "Resumen Ejecutivo" },
+  { id: "visualizaciones", label: "Visualizaciones Analiticas" },
+  { id: "patrones",        label: "Patrones de Compra" },
+  { id: "avanzado",        label: "Analisis Avanzado" },
 ];
 
 function Spinner() {
@@ -41,13 +41,13 @@ function ErrorState({ message }: { message: string }) {
 }
 
 export default function Dashboard() {
-  const [activeTab,     setActiveTab]     = useState<Tab>("resumen");
-  const [resumenData,   setResumenData]   = useState<ResumenData   | null>(null);
-  const [vizData,       setVizData]       = useState<VisualizacionesData | null>(null);
-  const [patronesData,  setPatronesData]  = useState<PatronesData  | null>(null);
-  const [avanzadoData,  setAvanzadoData]  = useState<AvanzadoData  | null>(null);
-  const [loading,       setLoading]       = useState(true);
-  const [error,         setError]         = useState<string | null>(null);
+  const [activeTab,    setActiveTab]    = useState<Tab>("resumen");
+  const [resumenData,  setResumenData]  = useState<ResumenData   | null>(null);
+  const [vizData,      setVizData]      = useState<VisualizacionesData | null>(null);
+  const [patronesData, setPatronesData] = useState<PatronesData  | null>(null);
+  const [avanzadoData, setAvanzadoData] = useState<AvanzadoData  | null>(null);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {

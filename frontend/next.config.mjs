@@ -1,7 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // El frontend consume el API en http://localhost:8000
-  // En producción (Cloud Run) se setea NEXT_PUBLIC_API_URL
+  // output standalone: empaqueta solo las dependencias necesarias para producción.
+  // Necesario para el Dockerfile multi-stage (node server.js en lugar de next start).
+  output: "standalone",
+
+  // En Cloud Run, NEXT_PUBLIC_API_URL se hornea en build-time vía --build-arg.
+  // En desarrollo local usa http://localhost:8000 (default en page.tsx).
 };
 
 export default nextConfig;

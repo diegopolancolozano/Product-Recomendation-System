@@ -41,53 +41,51 @@ app.add_middleware(
 _cache: dict[str, Any] = {}
 
 
+def _build_cache(data: dict) -> dict:
+    """Computa todos los artefactos analiticos y retorna el cache completo."""
+    transactions: pd.DataFrame = data["transactions"]
+    items: pd.DataFrame        = data["items"]
+
+    print("[1/5] KPIs y patrones...")
+    kpis     = compute_kpis(transactions, items)
+    patterns = compute_patterns(transactions, items)
+
+    print("[2/5] Features y K-Means...")
+    features = build_customer_features(transactions, items)
+    clustered, summary = run_kmeans(features, k=4)
+    cluster_sizes = clustered["cluster"].value_counts().to_dict() if not clustered.empty else {}
+
+    print("[3/5] Co-ocurrencia de productos...")
+    item_counts, pair_counts = build_cooccurrence(items, min_item_support=30)
+    product_labels = build_product_labels(items)
+    product_ids    = sorted(item_counts.keys())
+    customer_ids   = sorted(transactions["customer_id"].dropna().unique().tolist())
+
+    print(f"      {len(product_ids)} productos | {len(pair_counts):,} pares")
+    return {
+        "data":           data,
+        "kpis":           kpis,
+        "patterns":       patterns,
+        "kmeans":         {"clustered": clustered, "summary": summary, "cluster_sizes": cluster_sizes},
+        "cooccurrence":   (item_counts, pair_counts),
+        "product_labels": product_labels,
+        "product_ids":    product_ids,
+        "customer_ids":   customer_ids[:2000],
+    }
+
+
 @app.on_event("startup")
 def startup_event() -> None:
     global _cache
     try:
-        print("[1/6] Cargando archivos CSV...")
+        print("[0/5] Cargando archivos CSV...")
         data = load_data(DATA_DIR)
-        transactions: pd.DataFrame = data["transactions"]
-        items: pd.DataFrame = data["items"]
-        print(f"      {len(transactions):,} transacciones | {len(items):,} items")
-
-        print("[2/6] Calculando KPIs y patrones...")
-        kpis     = compute_kpis(transactions, items)
-        patterns = compute_patterns(transactions, items)
-
-        print("[3/6] Construyendo features por cliente...")
-        features = build_customer_features(transactions, items)
-        print(f"      {len(features):,} clientes")
-
-        print("[4/6] Ejecutando K-Means (k=4)...")
-        clustered, summary = run_kmeans(features, k=4)
-        cluster_sizes = (
-            clustered["cluster"].value_counts().to_dict() if not clustered.empty else {}
-        )
-
-        print("[5/6] Calculando co-ocurrencia de productos (puede tardar 1-2 min)...")
-        item_counts, pair_counts = build_cooccurrence(items, min_item_support=30)
-        product_labels = build_product_labels(items)
-        product_ids    = sorted(item_counts.keys())
-        customer_ids   = sorted(transactions["customer_id"].dropna().unique().tolist())
-        print(f"      {len(product_ids)} productos | {len(pair_counts):,} pares")
-
-        print("[6/6] Guardando en cache...")
-        _cache.update({
-            "data":           data,
-            "kpis":           kpis,
-            "patterns":       patterns,
-            "kmeans":         {"clustered": clustered, "summary": summary, "cluster_sizes": cluster_sizes},
-            "cooccurrence":   (item_counts, pair_counts),
-            "product_labels": product_labels,
-            "product_ids":    product_ids,
-            "customer_ids":   customer_ids[:2000],
-        })
-
+        print(f"      {len(data['transactions']):,} transacciones | {len(data['items']):,} items")
+        _cache = _build_cache(data)
+        kpis = _cache["kpis"]
         print(
             f"Listo. {kpis['total_transactions']:,} transacciones | "
-            f"{kpis['total_units']:,} unidades | "
-            f"{len(product_ids)} productos con soporte"
+            f"{kpis['total_units']:,} unidades"
         )
     except Exception as exc:
         print(f"Error al cargar datos: {exc}")
@@ -136,8 +134,8 @@ def get_resumen() -> dict:
         raise HTTPException(status_code=503, detail="Datos no disponibles.")
     kpis = _cache["kpis"]
     return {
-        "total_units":         int(kpis["total_units"]),
-        "total_transactions":  int(kpis["total_transactions"]),
+        "total_units":        int(kpis["total_units"]),
+        "total_transactions": int(kpis["total_transactions"]),
         "top_products": [
             {"product_id": int(r["product_id"]), "label": str(r["label"]), "units": int(r["units"])}
             for _, r in kpis["top_products"].iterrows()
@@ -162,7 +160,6 @@ def get_visualizaciones() -> dict:
     if "kpis" not in _cache:
         raise HTTPException(status_code=503, detail="Datos no disponibles.")
     kpis = _cache["kpis"]
-
     units_per_day = [
         {"date": str(r["date"]), "units": int(r["units"])}
         for _, r in kpis["units_per_day"].iterrows()
@@ -178,10 +175,10 @@ def get_visualizaciones() -> dict:
                 v = _safe_float(corr_df.loc[rn, cn]) or 0.0
                 correlation_matrix.append({"x": str(cn), "y": str(rn), "value": round(v, 3)})
     return {
-        "units_per_day":       units_per_day,
-        "boxplot":             boxplot,
-        "correlation_matrix":  correlation_matrix,
-        "correlation_labels":  corr_labels,
+        "units_per_day":      units_per_day,
+        "boxplot":            boxplot,
+        "correlation_matrix": correlation_matrix,
+        "correlation_labels": corr_labels,
     }
 
 
@@ -194,7 +191,7 @@ def get_patrones() -> dict:
 
 @app.get("/api/avanzado")
 def get_avanzado() -> dict:
-    """Segmentacion K-Means: scatter PCA 2D, resumen de clusters y listas para el recomendador."""
+    """Segmentacion K-Means + listas para el recomendador."""
     if "kmeans" not in _cache:
         raise HTTPException(status_code=503, detail="Datos de segmentacion no disponibles.")
 
@@ -210,12 +207,12 @@ def get_avanzado() -> dict:
 
     scatter = [
         {
-            "customer_id":    str(r["customer_id"]),
-            "pca1":           round(float(r["pca1"]), 4),
-            "pca2":           round(float(r["pca2"]), 4),
-            "cluster":        int(r["cluster"]),
-            "frequency":      int(r["frequency"]),
-            "total_units":    int(r["total_units"]),
+            "customer_id":     str(r["customer_id"]),
+            "pca1":            round(float(r["pca1"]), 4),
+            "pca2":            round(float(r["pca2"]), 4),
+            "cluster":         int(r["cluster"]),
+            "frequency":       int(r["frequency"]),
+            "total_units":     int(r["total_units"]),
             "unique_products": int(r["unique_products"]),
             "avg_basket_size": round(float(r["avg_basket_size"]), 1),
         }
@@ -256,15 +253,12 @@ def recomendar_producto(
 ) -> dict:
     if "cooccurrence" not in _cache:
         raise HTTPException(status_code=503, detail="Datos no disponibles.")
-
     item_counts, pair_counts = _cache["cooccurrence"]
-    labels = _cache.get("product_labels", {})
-    df = recommend_for_product(product_id, item_counts, pair_counts, top_n)
-
+    labels    = _cache.get("product_labels", {})
+    df        = recommend_for_product(product_id, item_counts, pair_counts, top_n)
     base_label = labels.get(product_id, f"Product {product_id}")
     if df.empty:
         return {"product_id": product_id, "product_label": base_label, "recommendations": []}
-
     return {
         "product_id":    product_id,
         "product_label": base_label,
@@ -287,15 +281,12 @@ def recomendar_cliente(
 ) -> dict:
     if "cooccurrence" not in _cache:
         raise HTTPException(status_code=503, detail="Datos no disponibles.")
-
-    items        = _cache["data"]["items"]
+    items                    = _cache["data"]["items"]
     item_counts, pair_counts = _cache["cooccurrence"]
     labels = _cache.get("product_labels", {})
-    df = recommend_for_customer(customer_id, items, item_counts, pair_counts, top_n)
-
+    df     = recommend_for_customer(customer_id, items, item_counts, pair_counts, top_n)
     if df.empty:
         return {"customer_id": customer_id, "recommendations": []}
-
     return {
         "customer_id": customer_id,
         "recommendations": [
@@ -308,3 +299,27 @@ def recomendar_cliente(
             for _, r in df.iterrows()
         ],
     }
+
+
+@app.post("/api/reload")
+def reload_data() -> dict:
+    """
+    Recarga los datos desde DATA_DIR y recomputa todos los caches.
+    Implementa el requisito C: 'Generacion de nuevos resultados' al incorporar
+    nuevos archivos CSV en la carpeta de Transactions.
+    """
+    global _cache
+    try:
+        print("Recargando datos desde", DATA_DIR)
+        data      = load_data(DATA_DIR)
+        _cache    = _build_cache(data)
+        kpis      = _cache["kpis"]
+        print("Recarga completada.")
+        return {
+            "status":       "ok",
+            "transactions": int(kpis["total_transactions"]),
+            "units":        int(kpis["total_units"]),
+            "products":     len(_cache["product_ids"]),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))

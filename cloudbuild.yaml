@@ -1,0 +1,128 @@
+# ============================================================
+#  Cloud Build — CI/CD Pipeline
+#  Supermarket Analytics (FastAPI + Next.js → Cloud Run)
+#
+#  Substitution variables (pasar con --substitutions o en trigger):
+#    _REGION          — región GCP  (ej. us-central1)
+#    _REPO            — nombre del repo en Artifact Registry (ej. supermarket-analytics)
+#    _API_SERVICE     — nombre del servicio Cloud Run API   (ej. supermarket-api)
+#    _FRONT_SERVICE   — nombre del servicio Cloud Run front (ej. supermarket-frontend)
+#
+#  Primera vez: el _API_URL se deja como placeholder y se actualiza en el trigger
+#  tras el primer despliegue del API. Ver DEPLOY.md §3.
+# ============================================================
+
+substitutions:
+  _REGION:        "us-central1"
+  _REPO:          "supermarket-analytics"
+  _API_SERVICE:   "supermarket-api"
+  _FRONT_SERVICE: "supermarket-frontend"
+  # Actualizar con la URL real del API tras el primer deploy:
+  _API_URL:       "https://supermarket-api-placeholder.run.app"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+
+  # ── 1. Build imagen del backend ─────────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build-api"
+    args:
+      - build
+      - -t
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_API_SERVICE}:$SHORT_SHA"
+      - -t
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_API_SERVICE}:latest"
+      - -f
+      - api/Dockerfile
+      - .
+
+  # ── 2. Push imagen del backend ──────────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-api"
+    waitFor: ["build-api"]
+    args:
+      - push
+      - "--all-tags"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_API_SERVICE}"
+
+  # ── 3. Deploy backend a Cloud Run ───────────────────────────────────────────
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "deploy-api"
+    waitFor: ["push-api"]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "${_API_SERVICE}"
+      - --image
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_API_SERVICE}:$SHORT_SHA"
+      - --region
+      - "${_REGION}"
+      - --platform
+      - managed
+      - --allow-unauthenticated
+      - --memory
+      - "1Gi"
+      - --cpu
+      - "1"
+      - --timeout
+      - "60"
+      - --port
+      - "8080"
+      - --set-env-vars
+      - "DATA_DIR=/app/DataSet/DataSet"
+
+  # ── 4. Build imagen del frontend ────────────────────────────────────────────
+  #       NEXT_PUBLIC_API_URL se hornea aquí — apunta al servicio API ya desplegado
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build-frontend"
+    waitFor: ["deploy-api"]
+    args:
+      - build
+      - --build-arg
+      - "NEXT_PUBLIC_API_URL=${_API_URL}"
+      - -t
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_FRONT_SERVICE}:$SHORT_SHA"
+      - -t
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_FRONT_SERVICE}:latest"
+      - -f
+      - frontend/Dockerfile
+      - frontend/
+
+  # ── 5. Push imagen del frontend ─────────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-frontend"
+    waitFor: ["build-frontend"]
+    args:
+      - push
+      - "--all-tags"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_FRONT_SERVICE}"
+
+  # ── 6. Deploy frontend a Cloud Run ──────────────────────────────────────────
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "deploy-frontend"
+    waitFor: ["push-frontend"]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "${_FRONT_SERVICE}"
+      - --image
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_FRONT_SERVICE}:$SHORT_SHA"
+      - --region
+      - "${_REGION}"
+      - --platform
+      - managed
+      - --allow-unauthenticated
+      - --memory
+      - "512Mi"
+      - --cpu
+      - "1"
+      - --port
+      - "3000"
+
+images:
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_API_SERVICE}:$SHORT_SHA"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_FRONT_SERVICE}:$SHORT_SHA"
