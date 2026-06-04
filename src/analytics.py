@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections import Counter
 from itertools import combinations
@@ -18,12 +18,13 @@ FEATURE_COLUMNS = [
     "avg_basket_size",
 ]
 
+WEEKDAY_ES = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"]
+
 
 def build_product_labels(items: pd.DataFrame) -> Dict[int, str]:
     labels: Dict[int, str] = {}
     if items.empty:
         return labels
-
     mapping = (
         items[["product_id", "category_name"]]
         .dropna()
@@ -43,7 +44,6 @@ def build_product_labels(items: pd.DataFrame) -> Dict[int, str]:
 def compute_kpis(transactions: pd.DataFrame, items: pd.DataFrame) -> Dict[str, pd.DataFrame | int]:
     total_units = int(items.shape[0])
     total_transactions = int(transactions["transaction_uid"].nunique())
-
     labels = build_product_labels(items)
 
     top_products = (
@@ -64,7 +64,9 @@ def compute_kpis(transactions: pd.DataFrame, items: pd.DataFrame) -> Dict[str, p
         .head(10)
         .reset_index(name="transactions")
     )
-    top_customers["customer_label"] = top_customers["customer_id"].map(lambda cid: f"Customer {cid}")
+    top_customers["customer_label"] = top_customers["customer_id"].map(
+        lambda cid: f"Customer {cid}"
+    )
 
     transactions_per_day = (
         transactions.dropna(subset=["date"])
@@ -100,7 +102,9 @@ def compute_kpis(transactions: pd.DataFrame, items: pd.DataFrame) -> Dict[str, p
 
     customer_features = build_customer_features(transactions, items)
     customer_corr = (
-        customer_features[FEATURE_COLUMNS].corr() if not customer_features.empty else pd.DataFrame()
+        customer_features[FEATURE_COLUMNS].corr()
+        if not customer_features.empty
+        else pd.DataFrame()
     )
 
     return {
@@ -133,12 +137,13 @@ def build_customer_features(transactions: pd.DataFrame, items: pd.DataFrame) -> 
         items.groupby("customer_id")["category_id"].nunique().rename("unique_categories")
     )
 
-    features = pd.concat([frequency, total_units, unique_products, unique_categories], axis=1).fillna(0)
+    features = pd.concat(
+        [frequency, total_units, unique_products, unique_categories], axis=1
+    ).fillna(0)
     features["avg_basket_size"] = (
         features["total_units"] / features["frequency"].replace(0, np.nan)
     ).fillna(0)
-    features = features.reset_index().rename(columns={"customer_id": "customer_id"})
-    return features
+    return features.reset_index()
 
 
 def run_kmeans(features: pd.DataFrame, k: int) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -164,48 +169,27 @@ def run_kmeans(features: pd.DataFrame, k: int) -> Tuple[pd.DataFrame, pd.DataFra
     return clustered, summary
 
 
-WEEKDAY_ES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-
-
 def compute_patterns(transactions: pd.DataFrame, items: pd.DataFrame) -> dict:
-    """
-    Patrones temporales y espaciales derivados de las columnas ya cargadas.
-
-    Retorna:
-      by_weekday  — promedio diario de transacciones y unidades por día de semana
-      by_store    — volumen total de transacciones y unidades por store_id
-      freq_hist   — histograma de frecuencia de compra por cliente
-    """
     result: dict = {}
 
-    # ── Día de la semana ──────────────────────────────────────────────────────
-    if not transactions.empty and "date" in transactions.columns:
+    if not transactions.empty:
         t = transactions.dropna(subset=["date"]).copy()
-        t["weekday"] = t["date"].dt.dayofweek          # 0=Lunes … 6=Domingo
+        t["weekday"] = t["date"].dt.dayofweek
         t["date_only"] = t["date"].dt.date
 
-        # Contar cuántos días distintos caen en cada weekday (para el promedio)
         days_per_wd = (
-            t[["weekday", "date_only"]]
-            .drop_duplicates()
-            .groupby("weekday")["date_only"]
-            .count()
-            .rename("num_days")
+            t[["weekday", "date_only"]].drop_duplicates()
+            .groupby("weekday")["date_only"].count().rename("num_days")
         )
-
         txn_per_wd = (
-            t.groupby("weekday")["transaction_uid"]
-            .nunique()
-            .rename("total_transactions")
+            t.groupby("weekday")["transaction_uid"].nunique().rename("total_transactions")
         )
-
         wd_df = pd.concat([txn_per_wd, days_per_wd], axis=1).fillna(0)
         wd_df["avg_transactions"] = (
             wd_df["total_transactions"] / wd_df["num_days"].replace(0, np.nan)
         ).fillna(0).round(1)
 
-        # Unidades por día de semana (promedio diario)
-        if not items.empty and "date" in items.columns:
+        if not items.empty:
             it = items.dropna(subset=["date"]).copy()
             it["weekday"] = it["date"].dt.dayofweek
             units_per_wd = it.groupby("weekday")["product_id"].count().rename("total_units")
@@ -230,47 +214,34 @@ def compute_patterns(transactions: pd.DataFrame, items: pd.DataFrame) -> dict:
     else:
         result["by_weekday"] = []
 
-    # ── Por tienda ────────────────────────────────────────────────────────────
-    if not transactions.empty and "store_id" in transactions.columns:
+    if not transactions.empty:
         store_txn = (
-            transactions.groupby("store_id")["transaction_uid"]
-            .nunique()
-            .sort_values(ascending=False)
-            .reset_index(name="transactions")
+            transactions.groupby("store_id")["transaction_uid"].nunique().rename("transactions")
         )
-        store_units = pd.Series(dtype="int64")
         if not items.empty and "store_id" in items.columns:
-            store_units = (
-                items.groupby("store_id")["product_id"]
-                .count()
-                .rename("units")
-            )
+            store_units = items.groupby("store_id")["product_id"].count().rename("units")
+        else:
+            store_units = pd.Series(dtype="int64", name="units")
 
-        store_df = store_txn.set_index("store_id")
-        store_df = store_df.join(store_units, how="left").fillna(0).reset_index()
+        store_df = pd.concat([store_txn, store_units], axis=1).fillna(0).reset_index()
+        store_df["transactions"] = store_df["transactions"].astype(int)
         store_df["units"] = store_df["units"].astype(int)
+        store_df = store_df.sort_values("transactions", ascending=False)
 
         result["by_store"] = [
-            {
-                "store_id": str(row["store_id"]),
-                "transactions": int(row["transactions"]),
-                "units": int(row["units"]),
-            }
-            for _, row in store_df.head(20).iterrows()
+            {"store_id": str(r["store_id"]), "transactions": int(r["transactions"]), "units": int(r["units"])}
+            for _, r in store_df.iterrows()
         ]
         result["num_stores"] = int(len(store_df))
     else:
         result["by_store"] = []
         result["num_stores"] = 0
 
-    # ── Histograma de frecuencia de compra ────────────────────────────────────
     if not transactions.empty:
-        freq_series = (
-            transactions.groupby("customer_id")["transaction_uid"]
-            .nunique()
-        )
-        # Buckets: 1, 2, 3, 4, 5, 6-10, 11-20, 21+
-        def bucket(n: int) -> str:
+        freq_series = transactions.groupby("customer_id")["transaction_uid"].nunique()
+        BUCKET_ORDER = ["1", "2", "3", "4", "5", "6-10", "11-20", "21+"]
+
+        def to_bucket(n: int) -> str:
             if n <= 5:
                 return str(n)
             if n <= 10:
@@ -279,14 +250,12 @@ def compute_patterns(transactions: pd.DataFrame, items: pd.DataFrame) -> dict:
                 return "11-20"
             return "21+"
 
-        BUCKET_ORDER = ["1", "2", "3", "4", "5", "6-10", "11-20", "21+"]
-        hist = freq_series.map(bucket).value_counts().rename("customers")
+        hist = freq_series.map(to_bucket).value_counts().rename("customers")
         hist_df = hist.reindex(BUCKET_ORDER, fill_value=0).reset_index()
         hist_df.columns = pd.Index(["bucket", "customers"])
-
         result["freq_histogram"] = [
-            {"bucket": str(row["bucket"]), "customers": int(row["customers"])}
-            for _, row in hist_df.iterrows()
+            {"bucket": str(r["bucket"]), "customers": int(r["customers"])}
+            for _, r in hist_df.iterrows()
         ]
     else:
         result["freq_histogram"] = []
@@ -316,14 +285,17 @@ def build_cooccurrence(
             pair_counts[(a, b)] += 1
 
     item_counts = {
-        int(product_id): int(count)
-        for product_id, count in item_counts_series[item_counts_series >= min_item_support].to_dict().items()
+        int(pid): int(cnt)
+        for pid, cnt in item_counts_series[item_counts_series >= min_item_support].to_dict().items()
     }
     return item_counts, pair_counts
 
 
 def recommend_for_product(
-    product_id: int, item_counts: Dict[int, int], pair_counts: Counter, top_n: int
+    product_id: int,
+    item_counts: Dict[int, int],
+    pair_counts: Counter,
+    top_n: int,
 ) -> pd.DataFrame:
     if product_id not in item_counts:
         return pd.DataFrame()
@@ -343,8 +315,7 @@ def recommend_for_product(
         return pd.DataFrame()
 
     df = pd.DataFrame(scores, columns=["product_id", "support", "confidence"])
-    df = df.sort_values(["confidence", "support"], ascending=False).head(top_n)
-    return df
+    return df.sort_values(["confidence", "support"], ascending=False).head(top_n)
 
 
 def recommend_for_customer(
@@ -368,17 +339,13 @@ def recommend_for_customer(
 
     for (a, b), count in pair_counts.items():
         if a in customer_products and b not in customer_products:
-            base = a
-            other = b
+            base, other = a, b
         elif b in customer_products and a not in customer_products:
-            base = b
-            other = a
+            base, other = b, a
         else:
             continue
-
         if base not in item_counts:
             continue
-
         score = count / item_counts[base]
         scores[other] = scores.get(other, 0.0) + score
         supports[other] = supports.get(other, 0) + int(count)
@@ -388,5 +355,4 @@ def recommend_for_customer(
 
     rows = [(pid, supports.get(pid, 0), score) for pid, score in scores.items()]
     df = pd.DataFrame(rows, columns=["product_id", "support", "score"])
-    df = df.sort_values(["score", "support"], ascending=False).head(top_n)
-    return df
+    return df.sort_values(["score", "support"], ascending=False).head(top_n)
