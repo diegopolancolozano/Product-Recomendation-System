@@ -46,3 +46,11 @@ npm-debug.log*
 *.tmp
 *.temp
 .cache/
+
+# ── Terraform ────────────────────────────────────────────────────────────────
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/*.tfstate
+infra/*.tfstate.backup
+infra/terraform.tfvars
+infra/trigger.zip

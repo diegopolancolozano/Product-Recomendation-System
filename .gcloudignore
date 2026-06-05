@@ -1,0 +1,19 @@
+# Archivos ignorados por Cloud Build al subir el contexto de build.
+# A diferencia de .gitignore, aqui se incluye DataSet/ para que
+# el Dockerfile pueda copiarlo dentro de la imagen del API.
+
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+infra/
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.backup
+infra/trigger.zip
+frontend/node_modules
+frontend/.next
+*.md
+start.ps1

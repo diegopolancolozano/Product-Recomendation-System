@@ -1,0 +1,11 @@
+# Renombrar a terraform.tfvars y completar los valores reales
+# NUNCA subir terraform.tfvars al repositorio (ya esta en .gitignore)
+
+project_id   = "distribuidosrecomendacion"
+region       = "us-central1"
+zone         = "us-central1-a"
+db_password  = "cambia-esto-por-una-clave-segura"
+
+# Opcional: para el trigger de Cloud Build desde GitHub
+github_owner = "tu-usuario-github"
+github_repo  = "Product-Recomendation-System"
