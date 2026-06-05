@@ -269,8 +269,7 @@ def _top_products_list() -> list[dict]:
                  "label": labels.get(int(r["product_id"]), f"Product {int(r['product_id'])}"),
                  "units": int(r["units"])}
                 for _, r in df.iterrows()]
-    from src.analytics import build_product_labels
-    labels = build_product_labels(_cache["data"]["items"])
+    labels = _cache.get("product_labels", {})
     return [{"product_id": int(r["product_id"]),
              "label": labels.get(int(r["product_id"]), f"Product {int(r['product_id'])}"),
              "units": int(r["units"])}
@@ -323,8 +322,7 @@ def get_resumen() -> dict:
         total_units        = kpis["total_units"]
         total_transactions = kpis["total_transactions"]
     else:
-        from src.analytics import build_product_labels
-        labels = build_product_labels(_cache["data"]["items"])
+        labels = _cache.get("product_labels", {})
         top_products = [
             {"product_id": int(r["product_id"]),
              "label": labels.get(int(r["product_id"]), f"Product {int(r['product_id'])}"),

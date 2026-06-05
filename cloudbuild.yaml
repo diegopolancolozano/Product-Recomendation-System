@@ -65,11 +65,11 @@ steps:
       - managed
       - --allow-unauthenticated
       - --memory
-      - "2Gi"
+      - "8Gi"
       - --cpu
-      - "1"
+      - "4"
       - --timeout
-      - "120"
+      - "300"
       - --port
       - "8080"
       - --set-env-vars

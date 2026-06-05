@@ -70,15 +70,25 @@ def load_transactions(transactions_dir: Path) -> pd.DataFrame:
 def explode_items(
     transactions: pd.DataFrame, product_category: pd.DataFrame, categories: pd.DataFrame
 ) -> pd.DataFrame:
-    items = transactions.copy()
+    # Solo copiamos las columnas que analytics.py realmente usa, para no duplicar
+    # product_list (el string largo) ni source_file/transaction_id en las 15M filas.
+    keep = [c for c in ["date", "store_id", "customer_id", "transaction_uid", "product_list"]
+            if c in transactions.columns]
+    items = transactions[keep].copy()
     items["product_id"] = items["product_list"].fillna("").str.split()
     items = items.explode("product_id")
     items = items[items["product_id"].notna() & (items["product_id"] != "")]
-    items["product_id"] = pd.to_numeric(items["product_id"], errors="coerce").astype("Int64")
+    items["product_id"] = pd.to_numeric(items["product_id"], errors="coerce")
     items = items.dropna(subset=["product_id"])
+    # product_list ya no es necesaria: la eliminamos antes del merge
+    items = items.drop(columns=["product_list"])
     items = items.merge(product_category, on="product_id", how="left")
     items = items.merge(categories, on="category_id", how="left")
     items["category_name"] = items["category_name"].fillna("Sin categoría")
+    # Tipos compactos: int32 en lugar de Int64 ahorra ~50% por columna
+    items["product_id"]  = items["product_id"].astype("int32")
+    items["category_id"] = items["category_id"].astype("Int32")
+    items["store_id"]    = items["store_id"].astype("category")
     return items
 
 
