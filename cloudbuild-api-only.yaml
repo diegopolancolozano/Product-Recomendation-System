@@ -1,0 +1,20 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'build-api'
+  args:
+    - build
+    - -t
+    - 'us-central1-docker.pkg.dev/distribuidosrecomendacion/supermarket-analytics/supermarket-api:latest'
+    - -f
+    - api/Dockerfile
+    - .
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'push-api'
+  waitFor: ['build-api']
+  args:
+    - push
+    - 'us-central1-docker.pkg.dev/distribuidosrecomendacion/supermarket-analytics/supermarket-api:latest'
+images:
+  - 'us-central1-docker.pkg.dev/distribuidosrecomendacion/supermarket-analytics/supermarket-api:latest'
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -62,7 +62,7 @@ def main(args: argparse.Namespace) -> None:
         spark.read
         .option("sep", "|")
         .schema(TRANSACTION_SCHEMA)
-        .csv(f"gs://{bucket}/raw/Transactions/*_Tran.csv")
+        .csv(f"gs://{bucket}/raw/Transactions/*.csv")
     )
 
     # Limpiar y normalizar

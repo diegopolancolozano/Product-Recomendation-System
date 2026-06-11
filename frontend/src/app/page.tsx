@@ -48,23 +48,31 @@ export default function Dashboard() {
   const [avanzadoData, setAvanzadoData] = useState<AvanzadoData  | null>(null);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState<string | null>(null);
+  const [lastTxCount,  setLastTxCount]  = useState<number>(0);
+  const [lastUpdate,   setLastUpdate]   = useState<string>("");
 
+  const loadAllData = async () => {
+    const [rRes, vRes, pRes, aRes] = await Promise.all([
+      fetch(`${API_BASE}/api/resumen`),
+      fetch(`${API_BASE}/api/visualizaciones`),
+      fetch(`${API_BASE}/api/patrones`),
+      fetch(`${API_BASE}/api/avanzado`),
+    ]);
+    if (!rRes.ok || !vRes.ok || !pRes.ok || !aRes.ok)
+      throw new Error(`HTTP ${rRes.status} / ${vRes.status} / ${pRes.status} / ${aRes.status}`);
+    const [r, v, p, a] = await Promise.all([rRes.json(), vRes.json(), pRes.json(), aRes.json()]);
+    setResumenData(r);
+    setVizData(v);
+    setPatronesData(p);
+    setAvanzadoData(a);
+    setLastUpdate(new Date().toLocaleTimeString());
+  };
+
+  // Carga inicial
   useEffect(() => {
     (async () => {
       try {
-        const [rRes, vRes, pRes, aRes] = await Promise.all([
-          fetch(`${API_BASE}/api/resumen`),
-          fetch(`${API_BASE}/api/visualizaciones`),
-          fetch(`${API_BASE}/api/patrones`),
-          fetch(`${API_BASE}/api/avanzado`),
-        ]);
-        if (!rRes.ok || !vRes.ok || !pRes.ok || !aRes.ok)
-          throw new Error(`HTTP ${rRes.status} / ${vRes.status} / ${pRes.status} / ${aRes.status}`);
-        const [r, v, p, a] = await Promise.all([rRes.json(), vRes.json(), pRes.json(), aRes.json()]);
-        setResumenData(r);
-        setVizData(v);
-        setPatronesData(p);
-        setAvanzadoData(a);
+        await loadAllData();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Error desconocido");
       } finally {
@@ -72,6 +80,25 @@ export default function Dashboard() {
       }
     })();
   }, []);
+
+  // Polling cada 30s: detecta nuevos datos y refresca automáticamente
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const healthRes = await fetch(`${API_BASE}/api/health`);
+        if (!healthRes.ok) return;
+        const health = await healthRes.json();
+        const newCount: number = health.transactions ?? 0;
+        if (health.status === "ok" && health.data_loaded && newCount !== lastTxCount && newCount > 0) {
+          setLastTxCount(newCount);
+          await loadAllData();
+        }
+      } catch {
+        // silencioso — no interrumpir la UI por un poll fallido
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [lastTxCount]);
 
   const apiStatus = error ? "offline" : loading ? "connecting" : "online";
 
@@ -84,10 +111,15 @@ export default function Dashboard() {
             <span style={{ color: "#d1d5db", margin: "0 10px" }}>|</span>
             <span style={{ fontSize: 12, color: "#9ca3af" }}>Procesamiento Distribuido de Datos</span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, color: apiStatus === "online" ? "#16a34a" : apiStatus === "connecting" ? "#d97706" : "#dc2626" }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: apiStatus === "online" ? "#22c55e" : apiStatus === "connecting" ? "#f59e0b" : "#ef4444", display: "inline-block", ...(apiStatus === "connecting" ? { animation: "pulse 1.5s ease-in-out infinite" } : {}) }} />
-            {apiStatus === "online" ? "API conectado" : apiStatus === "connecting" ? "Conectando" : "API desconectado"}
-            <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }`}</style>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 12 }}>
+            {lastUpdate && (
+              <span style={{ color: "#6b7280" }}>Actualizado: {lastUpdate}</span>
+            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500, color: apiStatus === "online" ? "#16a34a" : apiStatus === "connecting" ? "#d97706" : "#dc2626" }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: apiStatus === "online" ? "#22c55e" : apiStatus === "connecting" ? "#f59e0b" : "#ef4444", display: "inline-block", ...(apiStatus === "connecting" ? { animation: "pulse 1.5s ease-in-out infinite" } : {}) }} />
+              {apiStatus === "online" ? "API conectado" : apiStatus === "connecting" ? "Conectando" : "API desconectado"}
+              <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }`}</style>
+            </div>
           </div>
         </div>
       </header>

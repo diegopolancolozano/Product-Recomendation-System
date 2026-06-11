@@ -36,6 +36,7 @@ sys.path.insert(0, str(ROOT))
 CLOUD_SQL_INSTANCE = os.getenv("CLOUD_SQL_INSTANCE", "")
 USE_CLOUD_SQL      = bool(CLOUD_SQL_INSTANCE)
 DATA_DIR           = Path(os.getenv("DATA_DIR", str(ROOT / "DataSet" / "DataSet")))
+GCS_BUCKET         = os.getenv("GCS_BUCKET", "")  # Si está seteado, lee CSVs de GCS en cada reload
 
 app = FastAPI(title="Supermarket Analytics API", version="1.0.0")
 app.add_middleware(
@@ -132,7 +133,47 @@ def _load_from_cloud_sql() -> dict:
     }
 
 
-# ── Carga desde CSV (modo local) ──────────────────────────────────────────────
+# ── Descarga de CSVs desde GCS ───────────────────────────────────────────────
+def _download_gcs_csvs(bucket_name: str) -> Path:
+    """Descarga los CSVs de transacciones y productos desde GCS a un directorio temporal."""
+    import tempfile
+    from google.cloud import storage
+
+    print(f"Conectando a GCS bucket: {bucket_name}")
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    tmp = Path(tempfile.mkdtemp())
+
+    txn_dir  = tmp / "Transactions"
+    prod_dir = tmp / "Products"
+    txn_dir.mkdir()
+    prod_dir.mkdir()
+
+    prefix_txn = "raw/Transactions/"
+    for blob in bucket.list_blobs(prefix=prefix_txn):
+        if not blob.name.endswith(".csv"):
+            continue
+        relative = blob.name[len(prefix_txn):]
+        # Ignorar objetos anidados (ej. Tran108.csv/Tran108.csv) y metadata macOS (._*)
+        if "/" in relative or relative.startswith("._"):
+            print(f"  Ignorando: {blob.name}")
+            continue
+        fname = relative  # ya es solo el nombre del archivo
+        print(f"  Descargando transacciones: {fname}")
+        blob.download_to_filename(str(txn_dir / fname))
+
+    for blob in bucket.list_blobs(prefix="raw/Products/"):
+        if blob.name.endswith(".csv"):
+            fname = blob.name.rsplit("/", 1)[-1]
+            print(f"  Descargando productos: {fname}")
+            blob.download_to_filename(str(prod_dir / fname))
+
+    total = len(list(txn_dir.glob("*.csv")))
+    print(f"  {total} archivos de transacciones descargados.")
+    return tmp
+
+
+# ── Carga desde CSV (modo local o GCS) ───────────────────────────────────────
 def _load_from_csv() -> dict:
     from src.analytics import (
         build_cooccurrence, build_customer_features, build_product_labels,
@@ -140,8 +181,14 @@ def _load_from_csv() -> dict:
     )
     from src.data_loader import load_data
 
+    # Si GCS_BUCKET está configurado, descargar CSVs frescos del bucket
+    data_dir = DATA_DIR
+    if GCS_BUCKET:
+        print("[0/5] Descargando CSVs actualizados desde GCS...")
+        data_dir = _download_gcs_csvs(GCS_BUCKET)
+
     print("[1/5] Cargando CSV...")
-    data = load_data(DATA_DIR)
+    data = load_data(data_dir)
     transactions = data["transactions"]
     items        = data["items"]
     print(f"      {len(transactions):,} transacciones | {len(items):,} items")
@@ -160,12 +207,25 @@ def _load_from_csv() -> dict:
     product_labels = build_product_labels(items)
     customer_ids   = sorted(transactions["customer_id"].dropna().unique().tolist())[:2000]
 
-    # Historial compacto por cliente (reemplaza items DataFrame de 15M filas)
-    customer_products: dict = (
-        items.groupby("customer_id")["product_id"]
-        .apply(lambda s: set(int(p) for p in s.dropna()))
-        .to_dict()
-    )
+    # Historial compacto por cliente — numpy-based para evitar groupby+apply OOM
+    import numpy as np
+    _cust_arr = items["customer_id"].to_numpy()
+    _prod_arr = items["product_id"].to_numpy()
+    _sort_idx = np.argsort(_cust_arr, kind="mergesort")
+    _cust_s   = _cust_arr[_sort_idx]
+    _prod_s   = _prod_arr[_sort_idx].astype(int)
+    del _sort_idx, _cust_arr, _prod_arr
+
+    customer_products: dict = {}
+    _n = len(_cust_s)
+    _i = 0
+    while _i < _n:
+        _j = _i + 1
+        while _j < _n and _cust_s[_j] == _cust_s[_i]:
+            _j += 1
+        customer_products[str(_cust_s[_i])] = set(_prod_s[_i:_j].tolist())
+        _i = _j
+    del _cust_s, _prod_s
 
     print("[5/5] Liberando DataFrames y guardando cache...")
     import gc
@@ -190,6 +250,7 @@ def _load_from_csv() -> dict:
 
 _loading = True
 _load_error: str | None = None
+_reload_lock = threading.Lock()   # evita reloads concurrentes que duplican memoria
 
 
 def _rebuild_cache() -> None:
@@ -210,6 +271,7 @@ def startup_event() -> None:
     """
     def _load():
         global _loading, _load_error
+        _reload_lock.acquire()   # bloquea hasta tener el lock
         try:
             _rebuild_cache()
         except Exception as exc:
@@ -217,6 +279,7 @@ def startup_event() -> None:
             print(f"Error en carga: {exc}")
         finally:
             _loading = False
+            _reload_lock.release()
 
     threading.Thread(target=_load, daemon=True).start()
 
@@ -620,15 +683,27 @@ def recomendar_cliente(
 @app.post("/api/reload")
 def reload_data() -> dict:
     """
-    Recarga los datos y recomputa el cache.
-    En produccion GCP, los datos ya fueron procesados por Dataproc
-    y escritos en Cloud SQL — solo se refresca el cache en memoria.
-    En modo local, recarga los CSV.
+    Recarga los datos desde GCS/CSV en un hilo de fondo.
+    Retorna 202 inmediatamente para no bloquear Cloud Function ni Cloud Run.
+    Si ya hay una carga en progreso, la ignora para evitar OOM por reloads concurrentes.
     """
-    try:
-        _rebuild_cache()
-        kpis = _cache.get("kpis", {})
-        total = kpis.get("total_transactions", 0) if not USE_CLOUD_SQL else kpis.get("total_transactions", 0)
-        return {"status": "ok", "source": _cache.get("source"), "transactions": total}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    if not _reload_lock.acquire(blocking=False):
+        print("Reload ignorado: ya hay una carga en progreso.")
+        return {"status": "skipped", "message": "Carga ya en progreso"}
+
+    def _do_reload():
+        global _loading, _load_error
+        _loading = True
+        try:
+            _rebuild_cache()
+            _load_error = None
+            print("Reload completado exitosamente.")
+        except Exception as exc:
+            _load_error = str(exc)
+            print(f"Error en reload: {exc}")
+        finally:
+            _loading = False
+            _reload_lock.release()
+
+    threading.Thread(target=_do_reload, daemon=True).start()
+    return {"status": "accepted", "message": "Reload iniciado en background"}

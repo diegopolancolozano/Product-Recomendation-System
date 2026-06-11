@@ -1,0 +1,10 @@
+variable "project_id"          { type = string }
+variable "region"              { type = string }
+variable "zone"                { type = string }
+variable "environment"         { type = string }
+variable "bucket_name"         { type = string }
+variable "subnet_name"         { type = string }
+variable "dataproc_sa_email"   { type = string }
+variable "master_machine_type" { type = string }
+variable "worker_machine_type" { type = string }
+variable "worker_count"        { type = number }

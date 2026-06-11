@@ -1,0 +1,22 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'build-frontend'
+  args:
+    - build
+    - --build-arg
+    - 'NEXT_PUBLIC_API_URL=https://supermarket-api-679750996009.us-central1.run.app'
+    - -t
+    - 'us-central1-docker.pkg.dev/distribuidosrecomendacion/supermarket-analytics/supermarket-frontend:latest'
+    - -f
+    - frontend/Dockerfile
+    - frontend/
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'push-frontend'
+  waitFor: ['build-frontend']
+  args:
+    - push
+    - 'us-central1-docker.pkg.dev/distribuidosrecomendacion/supermarket-analytics/supermarket-frontend:latest'
+images:
+  - 'us-central1-docker.pkg.dev/distribuidosrecomendacion/supermarket-analytics/supermarket-frontend:latest'
+options:
+  logging: CLOUD_LOGGING_ONLY

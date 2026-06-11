@@ -26,7 +26,7 @@ def load_product_category(file_path: Path) -> pd.DataFrame:
 
 def load_transactions(transactions_dir: Path) -> pd.DataFrame:
     frames: list[pd.DataFrame] = []
-    for file_path in sorted(Path(transactions_dir).glob("*_Tran.csv")):
+    for file_path in sorted(Path(transactions_dir).glob("*.csv")):
         df = pd.read_csv(
             file_path,
             sep="|",

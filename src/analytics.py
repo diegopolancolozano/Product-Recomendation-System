@@ -271,22 +271,40 @@ def build_cooccurrence(
 
     item_counts_series = items["product_id"].value_counts()
     allowed = set(item_counts_series[item_counts_series >= min_item_support].index.tolist())
-    baskets = (
-        items.groupby("transaction_uid")["product_id"]
-        .apply(lambda s: sorted({int(p) for p in s.dropna() if p in allowed}))
-        .tolist()
-    )
 
+    # Filtrar solo productos permitidos y de-duplicar (transaction, product)
+    # Esto reduce drasticamente el tamaño antes de agrupar
+    mask = items["product_id"].isin(allowed)
+    filtered = (
+        items.loc[mask, ["transaction_uid", "product_id"]]
+        .drop_duplicates()
+        .copy()
+    )
+    filtered["product_id"] = filtered["product_id"].astype(int)
+
+    # Ordenar por transaction_uid para iterar en un solo paso (sin groupby+apply)
+    filtered = filtered.sort_values("transaction_uid", kind="mergesort")
+    txn_arr  = filtered["transaction_uid"].to_numpy()
+    prod_arr = filtered["product_id"].to_numpy()
+    del filtered  # liberar memoria
+
+    # Iterar sobre el array ordenado calculando pares por transacción
     pair_counts: Counter = Counter()
-    for products in baskets:
-        if len(products) < 2:
-            continue
-        for a, b in combinations(products, 2):
-            pair_counts[(a, b)] += 1
+    n = len(txn_arr)
+    i = 0
+    while i < n:
+        j = i + 1
+        while j < n and txn_arr[j] == txn_arr[i]:
+            j += 1
+        prods = sorted(int(p) for p in prod_arr[i:j])  # convertir a Python int
+        if len(prods) >= 2:
+            for a, b in combinations(prods, 2):
+                pair_counts[(a, b)] += 1
+        i = j
 
     item_counts = {
         int(pid): int(cnt)
-        for pid, cnt in item_counts_series[item_counts_series >= min_item_support].to_dict().items()
+        for pid, cnt in item_counts_series[item_counts_series >= min_item_support].items()
     }
     return item_counts, pair_counts
 
